@@ -40,7 +40,7 @@ unsigned long GetTickCount()
 
 #define PCIE_PULSE_WIDTH 10 // (127 max)
 
-#define OUTPUT_BUFFER_TYPE double //it could be any type, just big enough to store output
+#define OUTPUT_BUFFER_TYPE uint32_t //it could be any type, just big enough to store output
 #define OUTPUT_BUFFER_SIZE_BYTES (DRAGON_MAX_FRAME_LENGTH*sizeof(OUTPUT_BUFFER_TYPE)) //size of output buffer in bytes
 
 OUTPUT_BUFFER_TYPE *Output_Read; //this is the real output data to be sent to client!
@@ -139,7 +139,8 @@ int main(int argc, char** argv)
     size_t buf_count = DRAGON_BUFFER_COUNT;
     unsigned char* user_bufs[DRAGON_BUFFER_COUNT];
     unsigned long dtStart, dtEnd;
-    unsigned int i, j, k, m;
+    unsigned int i, j, k, m, n;
+    uint8_t *tmp_buf;
 
     unsigned long FrameCounter=0; //count input frames; when it reaches FrameCount - new output data is ready
 
@@ -246,33 +247,33 @@ int main(int argc, char** argv)
             continue;
         }
 
-        //printf("%d\n", buf.ptr);
+        tmp_buf=user_bufs[buf.idx];
 
+        n=0;
         for(i=0; i<p.frames_per_buffer; i++)
         {
             m=0;
             for(j=0; j<p.frame_length/DRAGON_DATA_PER_PACKET; j++)
+            {
+                n+=4;
                 for(k=4; k<DRAGON_PACKET_SIZE_BYTES-4; k+=8)
                 {
-                                        Output_Write[m+0] += user_bufs[buf.idx][7+i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k];
-                                        Output_Write[m+1] += user_bufs[buf.idx][6+i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k];
-                                        Output_Write[m+2] += user_bufs[buf.idx][5+i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k];
-                                        Output_Write[m+3] += user_bufs[buf.idx][4+i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k];
-                                        Output_Write[m+4] += user_bufs[buf.idx][3+i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k];
-                                        Output_Write[m+5] += user_bufs[buf.idx][2+i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k];
-
-                    m+=6;
+                    n=i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k+7;
+                    Output_Write[m++] += tmp_buf[n--];
+                    Output_Write[m++] += tmp_buf[n--];
+                    Output_Write[m++] += tmp_buf[n--];
+                    Output_Write[m++] += tmp_buf[n--];
+                    Output_Write[m++] += tmp_buf[n--];
+                    Output_Write[m++] += tmp_buf[n--];
                 }
+            }
         }
 
 
         FrameCounter+=p.frames_per_buffer;
         if(FrameCounter>=FrameCount)
         {
-            for(i=0; i<FrameLength; i++)
-                Output_Write[i]/=FrameCount;
-
-            printf("!!!\n");
+            printf("%d\n", Output_Write[0]);
             FrameCounter=0;
             Output_ChannelReadSelector=!Output_ChannelReadSelector;
             Output_Read=Output[Output_ChannelReadSelector];
@@ -282,12 +283,6 @@ int main(int argc, char** argv)
             memset(Output_Write, 0, OUTPUT_BUFFER_SIZE_BYTES);
         }
 
-
-
-
-        //Do something with data
-        //memset(user_bufs[buf.idx], 0, buf.len);
-
         //Queue buffer
         if (ioctl(DragonDevHandle, DRAGON_QBUF, &buf) )
         {
@@ -295,15 +290,15 @@ int main(int argc, char** argv)
             return -1;
         }
 
-        //        ++count;
-        //        if (count % LOOPS_COUNT == 0)
-        //        {
-        //            dtEnd = GetTickCount();
-        //            double  FPS = 1000*LOOPS_COUNT / (double)(dtEnd - dtStart);
-        //            count = 0;
-        //            dtStart = dtEnd;
-        //            printf("FPS = %lf\n", FPS);
-        //        }
+                ++count;
+                if (count % LOOPS_COUNT == 0)
+                {
+                    dtEnd = GetTickCount();
+                    double  FPS = 1000*LOOPS_COUNT / (double)(dtEnd - dtStart);
+                    count = 0;
+                    dtStart = dtEnd;
+                    printf("FPS = %lf\n", FPS);
+                }
     }
 
 
