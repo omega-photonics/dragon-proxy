@@ -18,6 +18,9 @@
 #include <netinet/in.h>
 #include <assert.h>
 
+#include <mutex>
+#include <condition_variable>
+
 #include "../dragon-module/dragon.h"
 
 #define DRAGON_DEV_FILENAME "/dev/dragon0"
@@ -60,6 +63,9 @@ uint32_t FrameCountToSet = DEFAULT_FRAME_COUNT;
 uint32_t PcieDacDataToSet = DEFAULT_DAC_DATA;
 
 
+std::mutex gWaitMutex;
+std::condition_variable gWaitCondition;
+
 // thread for TCPIP exchange with client
 void* SocketThread(void* ptr)
 {
@@ -90,8 +96,10 @@ void* SocketThread(void* ptr)
 
         while(1)
         {
+            std::unique_lock<std::mutex> lock(gWaitMutex);
+
             //wait for new data from PCIE thread
-            while(!NewDataReady) usleep(10000);
+            while(!NewDataReady) gWaitCondition.wait(lock);
             NewDataReady=false;
 
             Sock_RetValue=send(ClientSocket, &FrameLength, 2, MSG_NOSIGNAL);
@@ -219,7 +227,8 @@ int main(int argc, char** argv)
     p.half_shift=0;
     p.switch_period=FrameCount;
     p.sync_offset=0;
-    p.sync_width=127;
+    ///p.sync_width=127;
+    p.sync_width=50;
     p.dac_data=PcieDacData;
 
     printf("frames per buffer: %d\n", p.frames_per_buffer);
@@ -274,6 +283,8 @@ int main(int argc, char** argv)
         if(FrameCounter>=FrameCount)
         {
             printf("%d\n", Output_Write[0]);
+
+            std::unique_lock<std::mutex> lock(gWaitMutex);
             FrameCounter=0;
             Output_ChannelReadSelector=!Output_ChannelReadSelector;
             Output_Read=Output[Output_ChannelReadSelector];
@@ -281,6 +292,7 @@ int main(int argc, char** argv)
             NewDataReady=true;         // indicate TCPIP thread that new data is ready
             //clear write-buffer
             memset(Output_Write, 0, OUTPUT_BUFFER_SIZE_BYTES);
+            gWaitCondition.notify_one();
         }
 
         //Queue buffer
