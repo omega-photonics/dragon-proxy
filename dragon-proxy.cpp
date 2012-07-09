@@ -1,3 +1,10 @@
+//TODO
+/*
+1) apply dac settings
+2) watch fifo flag, sextet number and other service data
+*/
+
+
 #include <sys/ioctl.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -221,7 +228,7 @@ int main(int argc, char** argv)
 
     dragon_params p;
     p.channel=0;
-    p.channel_auto=1;
+    p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
     p.frame_length=FrameLength;
     p.half_shift=0;
