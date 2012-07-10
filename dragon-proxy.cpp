@@ -55,6 +55,7 @@ unsigned long GetTickCount()
 
 OUTPUT_BUFFER_TYPE *Output_Read; //this is the real output data to be sent to client!
 volatile bool NewDataReady=false; //this flag is set by PCIE thread when new output data is ready
+unsigned int CollectedFramesCount = 0;
 bool LastOutputDataChannel; //remembers which channel data is in output
 
 
@@ -111,7 +112,7 @@ void* SocketThread(void* ptr)
 
             Sock_RetValue=send(ClientSocket, &FrameLength, 2, MSG_NOSIGNAL);
             if(Sock_RetValue<2) break;
-            Sock_RetValue=send(ClientSocket, &FrameCount, 4, MSG_NOSIGNAL);
+            Sock_RetValue=send(ClientSocket, &CollectedFramesCount, 4, MSG_NOSIGNAL);
             if(Sock_RetValue<4) break;
             Sock_RetValue=send(ClientSocket, &PcieDacData, 4, MSG_NOSIGNAL);
             if(Sock_RetValue<4) break;
@@ -284,14 +285,14 @@ int main(int argc, char** argv)
         {
             std::unique_lock<std::mutex> lock(gWaitMutex);
             printf("Polarization collected frame count = %ld\n", FrameCounter);
+            CollectedFramesCount = FrameCounter;
+            FrameCounter=0;
+            switcherState = switcherStateCurrent;
 
             Output_ChannelReadSelector=!Output_ChannelReadSelector;
             Output_Read=Output[Output_ChannelReadSelector];
             Output_Write=Output[!Output_ChannelReadSelector];
             NewDataReady=true;         // indicate TCPIP thread that new data is ready
-
-            FrameCounter=0;
-            switcherState = switcherStateCurrent;
 
             //clear write-buffer
             memset(Output_Write, 0, OUTPUT_BUFFER_SIZE_BYTES);
