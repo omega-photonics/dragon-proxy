@@ -145,6 +145,11 @@ void* SocketThread(void* ptr)
 }
 
 
+static int GetSwitcherState(const dragon_buffer& buf, unsigned char *user_bufs[])
+{
+    return ((user_bufs[buf.idx][4] >> 5) & 1);
+}
+
 
 //main function, here main PCIE thread runs
 int main(int argc, char** argv)
@@ -156,6 +161,7 @@ int main(int argc, char** argv)
     unsigned long dtStart, dtEnd;
     unsigned int i, j, k, m, n;
     uint8_t *tmp_buf;
+    int switcherState = -1;
 
     unsigned long FrameCounter=0; //count input frames; when it reaches FrameCount - new output data is ready
 
@@ -227,6 +233,9 @@ int main(int argc, char** argv)
     }
 
     dragon_params p;
+
+    ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
+
     p.channel=0;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
@@ -234,8 +243,7 @@ int main(int argc, char** argv)
     p.half_shift=0;
     p.switch_period=FrameCount;
     p.sync_offset=0;
-    ///p.sync_width=127;
-    p.sync_width=50;
+    p.sync_width=127;
     p.dac_data=PcieDacData;
 
     printf("frames per buffer: %d\n", p.frames_per_buffer);
@@ -265,6 +273,47 @@ int main(int argc, char** argv)
 
         tmp_buf=user_bufs[buf.idx];
 
+        if (switcherState == -1)
+        {
+            switcherState = GetSwitcherState(buf, user_bufs);
+        }
+
+        int switcherStateCurrent = GetSwitcherState(buf, user_bufs);
+
+        if (switcherState != switcherStateCurrent)
+        {
+            std::unique_lock<std::mutex> lock(gWaitMutex);
+            printf("Polarization collected frame count = %ld\n", FrameCounter);
+
+            Output_ChannelReadSelector=!Output_ChannelReadSelector;
+            Output_Read=Output[Output_ChannelReadSelector];
+            Output_Write=Output[!Output_ChannelReadSelector];
+            NewDataReady=true;         // indicate TCPIP thread that new data is ready
+
+            FrameCounter=0;
+            switcherState = switcherStateCurrent;
+
+            //clear write-buffer
+            memset(Output_Write, 0, OUTPUT_BUFFER_SIZE_BYTES);
+            if (    FrameLength  !=  FrameLengthToSet ||
+                    FrameCount   !=  FrameCountToSet  ||
+                    PcieDacData  !=  PcieDacDataToSet  )
+            {
+                FrameLength  =  FrameLengthToSet;
+                FrameCount   =  FrameCountToSet;
+                PcieDacData  =  PcieDacDataToSet;
+
+                p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
+                p.frame_length=FrameLength;
+                p.switch_period=FrameCount;
+                p.dac_data=PcieDacData;
+
+                ioctl(DragonDevHandle, DRAGON_SET_PARAMS, &p);
+            }
+
+            gWaitCondition.notify_one();
+        }
+
         n=0;
         for(i=0; i<p.frames_per_buffer; i++)
         {
@@ -287,20 +336,6 @@ int main(int argc, char** argv)
 
 
         FrameCounter+=p.frames_per_buffer;
-        if(FrameCounter>=FrameCount)
-        {
-            printf("%d\n", Output_Write[0]);
-
-            std::unique_lock<std::mutex> lock(gWaitMutex);
-            FrameCounter=0;
-            Output_ChannelReadSelector=!Output_ChannelReadSelector;
-            Output_Read=Output[Output_ChannelReadSelector];
-            Output_Write=Output[!Output_ChannelReadSelector];
-            NewDataReady=true;         // indicate TCPIP thread that new data is ready
-            //clear write-buffer
-            memset(Output_Write, 0, OUTPUT_BUFFER_SIZE_BYTES);
-            gWaitCondition.notify_one();
-        }
 
         //Queue buffer
         if (ioctl(DragonDevHandle, DRAGON_QBUF, &buf) )
@@ -309,15 +344,15 @@ int main(int argc, char** argv)
             return -1;
         }
 
-                ++count;
-                if (count % LOOPS_COUNT == 0)
-                {
-                    dtEnd = GetTickCount();
-                    double  FPS = 1000*LOOPS_COUNT / (double)(dtEnd - dtStart);
-                    count = 0;
-                    dtStart = dtEnd;
-                    printf("FPS = %lf\n", FPS);
-                }
+        ++count;
+        if (count % LOOPS_COUNT == 0)
+        {
+            dtEnd = GetTickCount();
+            double  FPS = 1000*LOOPS_COUNT / (double)(dtEnd - dtStart);
+            count = 0;
+            dtStart = dtEnd;
+            printf("FPS = %lf\n", FPS);
+        }
     }
 
 
