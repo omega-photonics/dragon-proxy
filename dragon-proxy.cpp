@@ -32,7 +32,7 @@
 
 #define DRAGON_DEV_FILENAME "/dev/dragon0"
 
-#define DRAGON_BUFFER_COUNT 5
+#define DRAGON_BUFFER_COUNT 4
 
 #define LOOPS_COUNT 100
 
@@ -148,7 +148,7 @@ void* SocketThread(void* ptr)
 
 static int GetSwitcherState(const dragon_buffer& buf, unsigned char *user_bufs[])
 {
-    return ((user_bufs[buf.idx][4] >> 5) & 1);
+    return ((user_bufs[buf.idx][1] >> 5) & 1);
 }
 
 
@@ -289,6 +289,7 @@ int main(int argc, char** argv)
             FrameCounter=0;
             switcherState = switcherStateCurrent;
 
+
             Output_ChannelReadSelector=!Output_ChannelReadSelector;
             Output_Read=Output[Output_ChannelReadSelector];
             Output_Write=Output[!Output_ChannelReadSelector];
@@ -315,23 +316,15 @@ int main(int argc, char** argv)
             gWaitCondition.notify_one();
         }
 
-        n=0;
+
         for(i=0; i<p.frames_per_buffer; i++)
         {
             m=0;
             for(j=0; j<p.frame_length/DRAGON_DATA_PER_PACKET; j++)
             {
-                n+=4;
-                for(k=4; k<DRAGON_PACKET_SIZE_BYTES-4; k+=8)
-                {
-                    n=i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+k+7;
-                    Output_Write[m++] += tmp_buf[n--];
-                    Output_Write[m++] += tmp_buf[n--];
-                    Output_Write[m++] += tmp_buf[n--];
-                    Output_Write[m++] += tmp_buf[n--];
-                    Output_Write[m++] += tmp_buf[n--];
-                    Output_Write[m++] += tmp_buf[n--];
-                }
+                n=i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+4;
+                for(k=4; k<DRAGON_PACKET_SIZE_BYTES-4; k++)
+                    Output_Write[m++] += tmp_buf[n++];
             }
         }
 
