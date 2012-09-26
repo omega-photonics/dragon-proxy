@@ -193,6 +193,10 @@ int main(int argc, char** argv)
 
     ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 0);
 
+    uint32_t dID=0;
+    ioctl(DragonDevHandle, DRAGON_GET_ID, &dID);
+    printf("Dragon ID: %u\n", dID);
+
     if (!ioctl(DragonDevHandle, DRAGON_REQUEST_BUFFERS, &buf_count) )
     {
         printf("buf_count = %ld\n", buf_count);
