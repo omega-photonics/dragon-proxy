@@ -241,8 +241,8 @@ int main(int argc, char** argv)
 
     ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
 
-    p.adc_type=0; // 0 for 8-bit, 1 for 12-bit
-    p.board_type=0; // 0 for red KNJN, 1 for new green
+    p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
+    p.board_type=1; // 0 for red KNJN, 1 for new green
     p.channel=0;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
@@ -329,8 +329,22 @@ int main(int argc, char** argv)
             for(j=0; j<p.frame_length/DRAGON_DATA_PER_PACKET; j++)
             {
                 n=i*(p.frame_length*DRAGON_PACKET_SIZE_BYTES/DRAGON_DATA_PER_PACKET)+j*DRAGON_PACKET_SIZE_BYTES+4;
-                for(k=4; k<DRAGON_PACKET_SIZE_BYTES-4; k++)
-                    Output_Write[m++] += tmp_buf[n++];
+                if(p.adc_type==0) //8-bit
+                    for(k=4; k<DRAGON_PACKET_SIZE_BYTES-4; k++)
+                        Output_Write[m++] += tmp_buf[n++];
+                else if(p.adc_type==1) //12-bit
+                {
+                    for(k=4; k<DRAGON_PACKET_SIZE_BYTES-4; k+=8)
+                    {
+                        // aa-ab-bb-cc-cd-dd-ee-e_
+                        Output_Write[m++] += (tmp_buf[n]<<4)|(tmp_buf[n+1]>>4);
+                        Output_Write[m++] += ((15&tmp_buf[n+1])<<8)|tmp_buf[n+2];
+                        Output_Write[m++] += (tmp_buf[n+3]<<4)|(tmp_buf[n+4]>>4);
+                        Output_Write[m++] += ((15&tmp_buf[n+4])<<8)|(tmp_buf[n+5]);
+                        Output_Write[m++] += (tmp_buf[n+6]<<4)|(tmp_buf[n+7]>>4);
+                        n+=8;
+                    }
+                }
             }
         }
 
