@@ -19,7 +19,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <sys/types.h>
-
+#include <signal.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -152,6 +152,14 @@ static int GetSwitcherState(const dragon_buffer& buf, unsigned char *user_bufs[]
 }
 
 
+volatile bool ExitFlag=false;
+
+void ExitHandler(int s)
+{
+    printf("Caught SIGINT\n");
+    ExitFlag=true;
+}
+
 //main function, here main PCIE thread runs
 int main(int argc, char** argv)
 {
@@ -181,6 +189,8 @@ int main(int argc, char** argv)
     memset(Output[1], 0, OUTPUT_BUFFER_SIZE_BYTES);
     Output_Read=Output[Output_ChannelReadSelector];
     Output_Write=Output[!Output_ChannelReadSelector];
+
+    signal(SIGINT, ExitHandler);
 
     //open PCIE device
     DragonDevHandle = open(DRAGON_DEV_FILENAME, O_RDWR);
@@ -241,8 +251,8 @@ int main(int argc, char** argv)
 
     ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
 
-    p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
-    p.board_type=1; // 0 for red KNJN, 1 for new green
+    p.adc_type=0; // 0 for 8-bit, 1 for 12-bit
+    p.board_type=0; // 0 for red KNJN, 1 for new green
     p.channel=0;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
@@ -266,7 +276,7 @@ int main(int argc, char** argv)
     dtStart = GetTickCount();
     int count = 0;
 
-    for (;;)
+    for (;!ExitFlag;)
     {
         select(DragonDevHandle + 1, &fds, NULL, NULL, NULL);
 
@@ -369,10 +379,8 @@ int main(int argc, char** argv)
         }
     }
 
-
-
-
     close(DragonDevHandle);
+    printf("Dragon closed\n");
 
     return 0;
 }
