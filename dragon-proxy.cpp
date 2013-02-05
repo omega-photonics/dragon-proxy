@@ -201,7 +201,6 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 0);
 
     uint32_t dID=0;
     ioctl(DragonDevHandle, DRAGON_GET_ID, &dID);
@@ -217,6 +216,7 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 1);
 
     for (i = 0; i < buf_count; ++i)
     {
@@ -251,8 +251,8 @@ int main(int argc, char** argv)
 
     ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
 
-    p.adc_type=0; // 0 for 8-bit, 1 for 12-bit
-    p.board_type=0; // 0 for red KNJN, 1 for new green
+    p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
+    p.board_type=1; // 0 for red KNJN, 1 for new green
     p.channel=0;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
