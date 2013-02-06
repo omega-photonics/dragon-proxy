@@ -201,10 +201,28 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 0);
 
     uint32_t dID=0;
     ioctl(DragonDevHandle, DRAGON_GET_ID, &dID);
     printf("Dragon ID: %u\n", dID);
+
+    dragon_params p;
+    ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
+    p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
+    p.board_type=1; // 0 for red KNJN, 1 for new green
+    p.channel=0;
+    p.channel_auto=0;
+    p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
+    p.frame_length=FrameLength;
+    p.half_shift=0;
+    p.switch_period=FrameCount;
+    p.sync_offset=0;
+    p.sync_width=127;
+    p.dac_data=PcieDacData;
+    ioctl(DragonDevHandle, DRAGON_SET_PARAMS, &p);
+
+    printf("frames per buffer: %d\n", p.frames_per_buffer);
 
     if (!ioctl(DragonDevHandle, DRAGON_REQUEST_BUFFERS, &buf_count) )
     {
@@ -247,28 +265,8 @@ int main(int argc, char** argv)
         }
     }
 
-    dragon_params p;
-
-    ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
-
-    p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
-    p.board_type=1; // 0 for red KNJN, 1 for new green
-    p.channel=0;
-    p.channel_auto=0;
-    p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
-    p.frame_length=FrameLength;
-    p.half_shift=0;
-    p.switch_period=FrameCount;
-    p.sync_offset=0;
-    p.sync_width=127;
-    p.dac_data=PcieDacData;
-
-    printf("frames per buffer: %d\n", p.frames_per_buffer);
-
-    ioctl(DragonDevHandle, DRAGON_SET_PARAMS, &p);
-
-    ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 1);
-
+ 
+  
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(DragonDevHandle, &fds);
