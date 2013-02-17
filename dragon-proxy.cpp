@@ -1,10 +1,3 @@
-//TODO
-/*
-1) apply dac settings
-2) watch fifo flag, sextet number and other service data
-*/
-
-
 #include <sys/ioctl.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -65,11 +58,12 @@ bool LastOutputDataChannel; //remembers which channel data is in output
 uint16_t FrameLength = DRAGON_MAX_FRAME_LENGTH; //how many points in one input (and ouput) frame we have
 uint32_t FrameCount = DEFAULT_FRAME_COUNT; //how many frames we want to sum to get output data
 uint32_t PcieDacData = 0xFFFFFFFF; //DAC data to be set on PCIE device
+bool ActiveChannel = 0;
 //same data, but received from client - to be set in appropriate time
 uint16_t FrameLengthToSet = FrameLength;
 uint32_t FrameCountToSet = DEFAULT_FRAME_COUNT;
 uint32_t PcieDacDataToSet = DEFAULT_DAC_DATA;
-
+bool ActiveChannelToSet = 0;
 
 std::mutex gWaitMutex;
 std::condition_variable gWaitCondition;
@@ -77,7 +71,8 @@ std::condition_variable gWaitCondition;
 // thread for TCPIP exchange with client
 void* SocketThread(void* ptr)
 {
-    int Sock_RetValue, Sock_BytesWritten;
+    int Sock_RetValue;
+    unsigned int Sock_BytesWritten;
     int ClientSocket, ServerSocket;
     int r=-1;
 
@@ -110,6 +105,8 @@ void* SocketThread(void* ptr)
             while(!NewDataReady) gWaitCondition.wait(lock);
             NewDataReady=false;
 
+            Sock_RetValue=send(ClientSocket, &LastOutputDataChannel, 1, MSG_NOSIGNAL);
+            if(Sock_RetValue<1) break;
             Sock_RetValue=send(ClientSocket, &FrameLength, 2, MSG_NOSIGNAL);
             if(Sock_RetValue<2) break;
             Sock_RetValue=send(ClientSocket, &CollectedFramesCount, 4, MSG_NOSIGNAL);
@@ -121,15 +118,17 @@ void* SocketThread(void* ptr)
             Sock_BytesWritten=0;
             while(Sock_BytesWritten<OUTPUT_BUFFER_SIZE_BYTES)
             {
-                printf("%d of %ld\n", Sock_BytesWritten, OUTPUT_BUFFER_SIZE_BYTES);
                 Sock_RetValue=send(ClientSocket, Output_Read+Sock_BytesWritten, OUTPUT_BUFFER_SIZE_BYTES-Sock_BytesWritten, MSG_NOSIGNAL);
                 if(Sock_RetValue<=0) break;
                 else Sock_BytesWritten+=Sock_RetValue;
+                printf("%d of %ld sent\n", Sock_BytesWritten, OUTPUT_BUFFER_SIZE_BYTES);
             }
             if(Sock_RetValue<=0) break;
 
 
             //read data from client
+            Sock_RetValue=read(ClientSocket, &ActiveChannelToSet, 1);
+            if(Sock_RetValue<1) break;
             Sock_RetValue=read(ClientSocket, &FrameLengthToSet, 2);
             if(Sock_RetValue<2) break;
             Sock_RetValue=read(ClientSocket, &FrameCountToSet, 4);
@@ -149,6 +148,11 @@ void* SocketThread(void* ptr)
 static int GetSwitcherState(const dragon_buffer& buf, unsigned char *user_bufs[])
 {
     return ((user_bufs[buf.idx][1] >> 5) & 1);
+}
+
+static int GetCurrentChannel(const dragon_buffer& buf, unsigned char *user_bufs[])
+{
+    return ((user_bufs[buf.idx][1] >> 7) & 1);
 }
 
 
@@ -211,7 +215,7 @@ int main(int argc, char** argv)
     ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
     p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
     p.board_type=1; // 0 for red KNJN, 1 for new green
-    p.channel=0;
+    p.channel=ActiveChannel;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
     p.frame_length=FrameLength;
@@ -307,24 +311,34 @@ int main(int argc, char** argv)
             Output_ChannelReadSelector=!Output_ChannelReadSelector;
             Output_Read=Output[Output_ChannelReadSelector];
             Output_Write=Output[!Output_ChannelReadSelector];
+            LastOutputDataChannel = GetCurrentChannel(buf, user_bufs);
             NewDataReady=true;         // indicate TCPIP thread that new data is ready
 
             //clear write-buffer
             memset(Output_Write, 0, OUTPUT_BUFFER_SIZE_BYTES);
             if (    FrameLength  !=  FrameLengthToSet ||
                     FrameCount   !=  FrameCountToSet  ||
-                    PcieDacData  !=  PcieDacDataToSet  )
+                    PcieDacData  !=  PcieDacDataToSet ||
+                    ActiveChannel != ActiveChannelToSet
+                    )
             {
                 FrameLength  =  FrameLengthToSet;
                 FrameCount   =  FrameCountToSet;
                 PcieDacData  =  PcieDacDataToSet;
+                ActiveChannel = ActiveChannelToSet;
+
+                ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 0);
 
                 p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
                 p.frame_length=FrameLength;
                 p.switch_period=FrameCount;
                 p.dac_data=PcieDacData;
+                p.channel=ActiveChannel;
+                printf("Active Channel: %d\n", ActiveChannel);
 
                 ioctl(DragonDevHandle, DRAGON_SET_PARAMS, &p);
+
+                ioctl(DragonDevHandle, DRAGON_SET_ACTIVITY, 1);
             }
 
             gWaitCondition.notify_one();
