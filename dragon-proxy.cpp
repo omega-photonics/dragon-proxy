@@ -41,7 +41,7 @@ unsigned long GetTickCount()
 #define TCPIP_PORT 32120
 #define TCPIP_MAX_CLIENTS 1
 
-#define PCIE_PULSE_WIDTH 10 // (127 max)
+#define PCIE_PULSE_WIDTH 1 // (127 max)
 
 #define OUTPUT_BUFFER_TYPE uint32_t //it could be any type, just big enough to store output
 #define OUTPUT_BUFFER_SIZE_BYTES (DRAGON_MAX_FRAME_LENGTH*sizeof(OUTPUT_BUFFER_TYPE)) //size of output buffer in bytes
@@ -184,7 +184,7 @@ int main(int argc, char** argv)
 
     //start TCPIP server thread
     pthread_t SocketThreadHandle;
-    pthread_create(&SocketThreadHandle, NULL, SocketThread, NULL);
+    //pthread_create(&SocketThreadHandle, NULL, SocketThread, NULL);
 
     //allocate memory for output buffers, assign pointers to parts of double-buffers
     Output[0] = (OUTPUT_BUFFER_TYPE*)malloc(OUTPUT_BUFFER_SIZE_BYTES);
@@ -194,7 +194,7 @@ int main(int argc, char** argv)
     Output_Read=Output[Output_ChannelReadSelector];
     Output_Write=Output[!Output_ChannelReadSelector];
 
-    signal(SIGINT, ExitHandler);
+    //signal(SIGINT, ExitHandler);
 
     //open PCIE device
     DragonDevHandle = open(DRAGON_DEV_FILENAME, O_RDWR);
@@ -213,16 +213,17 @@ int main(int argc, char** argv)
 
     dragon_params p;
     ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
-    p.adc_type=0; // 0 for 8-bit, 1 for 12-bit
-    p.board_type=0; // 0 for red KNJN, 1 for new green
+    //p.adc_type=0; // 0 for 8-bit, 1 for 12-bit
+    //p.board_type=0; // 0 for red KNJN, 1 for new green
     p.channel=ActiveChannel;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
     p.frame_length=FrameLength;
     p.half_shift=0;
-    p.switch_period=FrameCount;
-    p.sync_offset=0;
-    p.sync_width=127;
+    //p.switch_period=FrameCount;
+    p.pulse_mask=0x80000001;
+    p.sync_offset=16;
+    p.sync_width=1;
     p.dac_data=PcieDacData;
     ioctl(DragonDevHandle, DRAGON_SET_PARAMS, &p);
 
@@ -291,14 +292,15 @@ int main(int argc, char** argv)
         }
 
         tmp_buf=user_bufs[buf.idx];
-
+        memset(tmp_buf, 0, buf.len);
+        /*
         if (switcherState == -1)
         {
             switcherState = GetSwitcherState(buf, user_bufs);
         }
-
+       
         int switcherStateCurrent = GetSwitcherState(buf, user_bufs);
-
+        
         if (switcherState != switcherStateCurrent)
         {
             std::unique_lock<std::mutex> lock(gWaitMutex);
@@ -372,6 +374,7 @@ int main(int argc, char** argv)
 
 
         FrameCounter+=p.frames_per_buffer;
+        */
 
         //Queue buffer
         if (ioctl(DragonDevHandle, DRAGON_QBUF, &buf) )
