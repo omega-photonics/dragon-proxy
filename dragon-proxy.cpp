@@ -213,8 +213,8 @@ int main(int argc, char** argv)
 
     dragon_params p;
     ioctl(DragonDevHandle, DRAGON_QUERY_PARAMS, &p);
-    p.adc_type=0; // 0 for 8-bit, 1 for 12-bit
-    p.board_type=0; // 0 for red KNJN, 1 for new green
+    p.adc_type=1; // 0 for 8-bit, 1 for 12-bit
+    p.board_type=1; // 0 for red KNJN, 1 for new green
     p.channel=ActiveChannel;
     p.channel_auto=0;
     p.frames_per_buffer=(DRAGON_MAX_DATA_IN_BUFFER/FrameLength);
